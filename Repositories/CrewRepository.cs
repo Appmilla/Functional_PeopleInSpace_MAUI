@@ -11,7 +11,7 @@ namespace FunctionalPeopleInSpaceMaui.Repositories;
 public interface ICrewRepository
 {
     bool IsBusy { get; set; }
-    IObservable<ICollection<CrewModel>?> GetCrew(bool forceRefresh = false);
+    IObservable<Either<Exception, IReadOnlyList<CrewModel>>>GetCrew(bool forceRefresh = false);
 }
 
 public class CrewRepository(
@@ -26,7 +26,7 @@ public class CrewRepository(
     [Reactive]
     public bool IsBusy { get; set; }
 
-    public IObservable<ICollection<CrewModel>?> GetCrew(bool forceRefresh = false)
+    public IObservable<Either<Exception, IReadOnlyList<CrewModel>>> GetCrew(bool forceRefresh = false)
     {
         return Observable.Defer(() =>
         {
@@ -37,33 +37,35 @@ public class CrewRepository(
             }
 
             DateTimeOffset? expiration = DateTimeOffset.Now + _cacheLifetime;
-            return cache.GetOrFetchObject(CrewCacheKey,
-                    fetchFunc: FetchAndCacheCrew,
-                    absoluteExpiration: expiration)
+            return cache.GetOrFetchObject<IReadOnlyList<CrewModel>>(CrewCacheKey, FetchAndProcessCrew, expiration)
+                .Select(crew => Either<Exception, IReadOnlyList<CrewModel>>.Right(crew))
+                .Catch<Either<Exception, IReadOnlyList<CrewModel>>, Exception>(ex => Observable.Return(Either<Exception, IReadOnlyList<CrewModel>>.Left(ex)))
                 .Do(_ => IsBusy = false);
         }).SubscribeOn(schedulerProvider.ThreadPool);
     }
 
-    private IObservable<ICollection<CrewModel>> FetchAndCacheCrew()
+    private IObservable<Either<Exception, IReadOnlyList<CrewModel>>> FetchAndCacheCrew()
     {
-        return Observable.Create<ICollection<CrewModel>>(async observer =>
-        {
-            try
+        return Observable.FromAsync(async () =>
             {
-                var crewJson = await spaceXApi.GetAllCrew().ConfigureAwait(false);
-                var crew = CrewModel.FromJson(crewJson).ToList();
-                await cache.InsertObject(CrewCacheKey, crew, DateTimeOffset.Now + _cacheLifetime);
-                observer.OnNext(crew);
-                observer.OnCompleted();
-            }
-            catch (Exception ex)
-            {
-                observer.OnError(ex);
-            }
-            finally
-            {
-                IsBusy = false;
-            }
-        }).SubscribeOn(schedulerProvider.ThreadPool);
+                try
+                {
+                    var crew = await FetchAndProcessCrew().ConfigureAwait(false);
+                    return Either<Exception, IReadOnlyList<CrewModel>>.Right(crew);
+                }
+                catch (Exception ex)
+                {
+                    return Either<Exception, IReadOnlyList<CrewModel>>.Left(ex);
+                }
+            }).Do(_ => IsBusy = false)
+            .SubscribeOn(schedulerProvider.ThreadPool);
+    }
+
+    private async Task<IReadOnlyList<CrewModel>> FetchAndProcessCrew()
+    {
+        var crewJson = await spaceXApi.GetAllCrew().ConfigureAwait(false);
+        var crew = CrewModel.FromJson(crewJson).ToList().AsReadOnly();
+        await cache.InsertObject(CrewCacheKey, crew, DateTimeOffset.Now + _cacheLifetime);
+        return crew;
     }
 }

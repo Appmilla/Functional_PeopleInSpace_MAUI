@@ -10,7 +10,7 @@ public class DetailPageViewModel : ReactiveObject, IQueryAttributable
     public string PageTitle { get; set; } = "Biography";
 
     [Reactive] 
-    public CrewModel? CrewMember { get; private set; }
+    public CrewDetailModel? CrewMember { get; private set; }
     
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
@@ -20,14 +20,10 @@ public class DetailPageViewModel : ReactiveObject, IQueryAttributable
         var image = GetQueryValue(query, "image");
         var wikipedia = GetQueryValue(query, "wikipedia");
 
-        if (!string.IsNullOrEmpty(name) && Uri.TryCreate(image, UriKind.Absolute, out var imageUri) && Uri.TryCreate(wikipedia, UriKind.Absolute, out var wikiUri))
+        if (!string.IsNullOrEmpty(name) && Uri.TryCreate(image, UriKind.Absolute, out var imageUri) &&
+            Uri.TryCreate(wikipedia, UriKind.Absolute, out var wikiUri))
         {
-            CrewMember = new CrewModel
-            {
-                Name = name,
-                Image = imageUri,
-                Wikipedia = wikiUri
-            };
+            CrewMember = new CrewDetailModel(name, imageUri, wikiUri);
         }
         else
         {

@@ -12,6 +12,7 @@ using FunctionalPeopleInSpaceMaui.Navigation;
 using FunctionalPeopleInSpaceMaui.Reactive;
 using FunctionalPeopleInSpaceMaui.Repositories;
 using FunctionalPeopleInSpaceMaui.Extensions;
+using Unit = System.Reactive.Unit;
 
 namespace FunctionalPeopleInSpaceMaui.ViewModels;
 
@@ -28,7 +29,7 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
     [ObservableAsProperty]
     public bool IsRefreshing { get; }
     
-    public ReactiveCommand<bool, ICollection<CrewModel>?> LoadCommand { get; }
+    public ReactiveCommand<bool, Either<Exception, IReadOnlyList<CrewModel>>> LoadCommand { get; }
     
     public ReactiveCommand<CrewModel, Unit> NavigateToDetailCommand { get; private set; }
     
@@ -67,7 +68,7 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
             .DisposeMany()                              
             .Subscribe();
         
-        LoadCommand = ReactiveCommand.CreateFromObservable<bool, ICollection<CrewModel>?>(
+        LoadCommand = ReactiveCommand.CreateFromObservable<bool, Either<Exception, IReadOnlyList<CrewModel>>>(
             forceRefresh =>  _crewRepository.GetCrew(forceRefresh),
             this.WhenAnyValue(x => x.IsRefreshing).Select(x => !x), 
             outputScheduler: _schedulerProvider.MainThread); 
@@ -87,19 +88,17 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
         });
     }
     
-    private void Crew_OnNext(ICollection<CrewModel>? crew)
+    private void Crew_OnNext(Either<Exception, IReadOnlyList<CrewModel>> result)
     {
-        try
-        {
-            if (crew != null) UpdateCrew(crew);
-        }
-        catch (Exception exception)
-        {
-            Crew_OnError(exception);
-        }
+        result.Match(
+            crew =>
+            {
+                if (crew != null) UpdateCrew(crew);
+            },
+            Crew_OnError);
     }
     
-    private void UpdateCrew(ICollection<CrewModel> crew)
+    private void UpdateCrew(IReadOnlyList<CrewModel> crew)
     {
         _crewCache.Edit(innerCache =>
         {
