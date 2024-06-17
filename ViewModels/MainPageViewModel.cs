@@ -3,7 +3,6 @@ using DynamicData.Binding;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
 using System.Collections.ObjectModel;
-using System.Reactive;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using FunctionalPeopleInSpaceMaui.Alerts;
@@ -29,7 +28,7 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
     [ObservableAsProperty]
     public bool IsRefreshing { get; }
     
-    public ReactiveCommand<bool, Either<Exception, IReadOnlyList<CrewModel>>> LoadCommand { get; }
+    public ReactiveCommand<bool, Either<CrewError, IReadOnlyList<CrewModel>>> LoadCommand { get; }
     
     public ReactiveCommand<CrewModel, Unit> NavigateToDetailCommand { get; private set; }
     
@@ -56,7 +55,7 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
         _navigationService = navigationService;
         _userAlerts = userAlerts;
         
-        PageTitle = "People In Space MAUI";
+        PageTitle = "People In Space Functional MAUI";
         
         var crewSort = SortExpressionComparer<CrewModel>
             .Ascending(c => c.Name);
@@ -68,11 +67,11 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
             .DisposeMany()                              
             .Subscribe();
         
-        LoadCommand = ReactiveCommand.CreateFromObservable<bool, Either<Exception, IReadOnlyList<CrewModel>>>(
+        LoadCommand = ReactiveCommand.CreateFromObservable<bool, Either<CrewError, IReadOnlyList<CrewModel>>>(
             forceRefresh =>  _crewRepository.GetCrew(forceRefresh),
             this.WhenAnyValue(x => x.IsRefreshing).Select(x => !x), 
             outputScheduler: _schedulerProvider.MainThread); 
-        LoadCommand.ThrownExceptions.Subscribe(Crew_OnError);
+        LoadCommand.ThrownExceptions.Subscribe(Crew_OnException);
         LoadCommand.Subscribe(Crew_OnNext);
         
         NavigateToDetailCommand = ReactiveCommand.Create<CrewModel>(NavigateToDetail);
@@ -88,7 +87,7 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
         });
     }
     
-    private void Crew_OnNext(Either<Exception, IReadOnlyList<CrewModel>> result)
+    private void Crew_OnNext(Either<CrewError, IReadOnlyList<CrewModel>> result)
     {
         result.Match(
             crew =>
@@ -106,9 +105,30 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
         });
     }
 
-    private void Crew_OnError(Exception e)
+    private void Crew_OnException(Exception e)
     {
-        _userAlerts.ShowToast(e.Message).FireAndForgetSafeAsync();
+        ShowError(e.Message);
+    }
+    
+    private void Crew_OnError(CrewError e)
+    {
+        switch (e)
+        {
+            case NetworkError:
+                ShowError(e.Message);
+                break;
+            case ParsingError:
+                _userAlerts.ShowSnackbar(e.Message, TimeSpan.FromSeconds(5));
+                break;
+            default:
+                ShowError(e.Message);
+                break;
+        }
+    }
+
+    private void ShowError(string message)
+    {
+        _userAlerts.ShowToast(message).FireAndForgetSafeAsync();
     }
     
     private void NavigateToDetail(CrewModel crewMember)

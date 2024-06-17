@@ -1,52 +1,40 @@
+using System;
+using System.Collections.Generic;
 using System.Globalization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
+using LanguageExt;
 
 namespace FunctionalPeopleInSpaceMaui.Models;
 
-public partial class CrewModel(
-    string name,
-    string agency,
-    Uri image,
-    Uri wikipedia,
-    IReadOnlyList<string> launches,
-    Status status,
-    string id)
+public record CrewModel(
+    [property: JsonProperty("name")] string Name,
+    [property: JsonProperty("agency")] string Agency,
+    [property: JsonProperty("image")] Uri Image,
+    [property: JsonProperty("wikipedia")] Uri Wikipedia,
+    [property: JsonProperty("launches")] IReadOnlyList<string> Launches,
+    [property: JsonProperty("status")] Status Status,
+    [property: JsonProperty("id")] string Id)
 {
-    [JsonProperty("name")]
-    public string Name { get; } = name;
-
-    [JsonProperty("agency")]
-    public string Agency { get; } = agency;
-
-    [JsonProperty("image")]
-    public Uri Image { get; } = image;
-
-    [JsonProperty("wikipedia")]
-    public Uri Wikipedia { get; } = wikipedia;
-
-    [JsonProperty("launches")]
-    public IReadOnlyList<string> Launches { get; } = launches;
-
-    [JsonProperty("status")]
-    public Status Status { get; } = status;
-
-    [JsonProperty("id")]
-    public string Id { get; } = id;
-    
-    public static CrewModel[] FromJson(string json) => JsonConvert.DeserializeObject<CrewModel[]>(json, Converter.Settings);
+    public static Either<CrewError, CrewModel[]> FromJson(string json)
+    {
+        try
+        {
+            var models = JsonConvert.DeserializeObject<CrewModel[]>(json, Converter.Settings);
+            return models == null ? 
+                Either<CrewError, CrewModel[]>
+                    .Left(new ParsingError("Deserialization returned null.")) : Either<CrewError, CrewModel[]>
+                    .Right(models);
+        }
+        catch (JsonException ex)
+        {
+            return Either<CrewError, CrewModel[]>
+                .Left(new ParsingError("Failed to parse crew data: " + ex.Message));
+        }
+    }
 }
 
 public enum Status { Active, Inactive, Retired, Unknown };
-
-/*
-public partial class CrewModel
-{
-    public static CrewModel Create(string name, string agency, Uri image, Uri wikipedia, IReadOnlyList<string> launches, Status status, string id)
-    {
-        return new CrewModel(name, agency, image, wikipedia, launches, status, id);
-    }
-}*/
 
 internal static class Converter
 {
@@ -76,7 +64,7 @@ internal class StatusConverter : JsonConverter
             "inactive" => Status.Inactive,
             "retired" => Status.Retired,
             "unknown" => Status.Unknown,
-            _ => throw new Exception("Cannot unmarshal type Status")
+            _ => throw new JsonException("Cannot unmarshal type Status")
         };
     }
 
@@ -94,7 +82,7 @@ internal class StatusConverter : JsonConverter
             Status.Inactive => "inactive",
             Status.Retired => "retired",
             Status.Unknown => "unknown",
-            _ => throw new Exception("Cannot marshal type Status")
+            _ => throw new JsonException("Cannot marshal type Status")
         };
         serializer.Serialize(writer, statusString);
     }

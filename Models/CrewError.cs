@@ -1,4 +1,4 @@
-namespace FunctionalPeopleInSpaceMaui.Repositories;
+namespace FunctionalPeopleInSpaceMaui.Models;
 
 public abstract class CrewError(string message)
 {

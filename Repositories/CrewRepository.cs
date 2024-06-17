@@ -11,7 +11,7 @@ namespace FunctionalPeopleInSpaceMaui.Repositories;
 public interface ICrewRepository
 {
     bool IsBusy { get; set; }
-    IObservable<Either<Exception, IReadOnlyList<CrewModel>>>GetCrew(bool forceRefresh = false);
+    IObservable<Either<CrewError, IReadOnlyList<CrewModel>>>GetCrew(bool forceRefresh = false);
 }
 
 public class CrewRepository(
@@ -23,10 +23,9 @@ public class CrewRepository(
     private const string CrewCacheKey = "crew_cache_key";
     private readonly TimeSpan _cacheLifetime = TimeSpan.FromDays(1);
 
-    [Reactive]
-    public bool IsBusy { get; set; }
+    [Reactive] public bool IsBusy { get; set; }
 
-    public IObservable<Either<Exception, IReadOnlyList<CrewModel>>> GetCrew(bool forceRefresh = false)
+    public IObservable<Either<CrewError, IReadOnlyList<CrewModel>>> GetCrew(bool forceRefresh = false)
     {
         return Observable.Defer(() =>
         {
@@ -37,35 +36,49 @@ public class CrewRepository(
             }
 
             DateTimeOffset? expiration = DateTimeOffset.Now + _cacheLifetime;
-            return cache.GetOrFetchObject<IReadOnlyList<CrewModel>>(CrewCacheKey, FetchAndProcessCrew, expiration)
-                .Select(crew => Either<Exception, IReadOnlyList<CrewModel>>.Right(crew))
-                .Catch<Either<Exception, IReadOnlyList<CrewModel>>, Exception>(ex => Observable.Return(Either<Exception, IReadOnlyList<CrewModel>>.Left(ex)))
+            return cache.GetOrFetchObject<IReadOnlyList<CrewModel>>(CrewCacheKey, () => FetchAndProcessCrew()
+                    .Select(either => either.Match(
+                        Right: crew => crew,
+                        Left: error => throw new Exception(error.Message)
+                    )), expiration)
+                .Select(crew => Either<CrewError, IReadOnlyList<CrewModel>>.Right(crew))
+                .Catch<Either<CrewError, IReadOnlyList<CrewModel>>, Exception>(ex =>
+                    Observable.Return(Either<CrewError, IReadOnlyList<CrewModel>>.Left(new CacheError(ex.Message))))
                 .Do(_ => IsBusy = false);
         }).SubscribeOn(schedulerProvider.ThreadPool);
     }
 
-    private IObservable<Either<Exception, IReadOnlyList<CrewModel>>> FetchAndCacheCrew()
+    private IObservable<Either<CrewError, IReadOnlyList<CrewModel>>> FetchAndCacheCrew()
     {
-        return Observable.FromAsync(async () =>
-            {
-                try
-                {
-                    var crew = await FetchAndProcessCrew().ConfigureAwait(false);
-                    return Either<Exception, IReadOnlyList<CrewModel>>.Right(crew);
-                }
-                catch (Exception ex)
-                {
-                    return Either<Exception, IReadOnlyList<CrewModel>>.Left(ex);
-                }
-            }).Do(_ => IsBusy = false)
+        return Observable.FromAsync(FetchAndProcessCrew)
+            .Do(_ => IsBusy = false)
             .SubscribeOn(schedulerProvider.ThreadPool);
     }
 
-    private async Task<IReadOnlyList<CrewModel>> FetchAndProcessCrew()
+    private async Task<Either<CrewError, IReadOnlyList<CrewModel>>> FetchAndProcessCrew()
     {
-        var crewJson = await spaceXApi.GetAllCrew().ConfigureAwait(false);
-        var crew = CrewModel.FromJson(crewJson).ToList().AsReadOnly();
-        await cache.InsertObject(CrewCacheKey, crew, DateTimeOffset.Now + _cacheLifetime);
-        return crew;
+        try
+        {
+            var crewJson = await spaceXApi.GetAllCrew().ConfigureAwait(false);
+            var result = CrewModel.FromJson(crewJson);
+            return result.Match(
+                Right: crew =>
+                {
+                    var readOnlyCrew = crew.ToList().AsReadOnly();
+                    cache.InsertObject(CrewCacheKey, readOnlyCrew, DateTimeOffset.Now + _cacheLifetime).Wait();
+                    return Either<CrewError, IReadOnlyList<CrewModel>>.Right(readOnlyCrew);
+                },
+                Left: error => Either<CrewError, IReadOnlyList<CrewModel>>.Left(error)
+            );
+        }
+        catch (HttpRequestException ex)
+        {
+            return Either<CrewError, IReadOnlyList<CrewModel>>.Left(new NetworkError("Network error: " + ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return Either<CrewError, IReadOnlyList<CrewModel>>.Left(
+                new NetworkError("Unexpected error: " + ex.Message));
+        }
     }
 }
