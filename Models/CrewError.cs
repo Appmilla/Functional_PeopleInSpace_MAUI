@@ -1,12 +1,9 @@
 namespace FunctionalPeopleInSpaceMaui.Models;
 
-public abstract class CrewError(string message)
-{
-    public string Message { get; } = message;
-}
+public abstract record CrewError(string Message);
 
-public class NetworkError(string message) : CrewError(message);
+public record NetworkError(string Message) : CrewError(Message);
 
-public class ParsingError(string message) : CrewError(message);
+public record ParsingError(string Message) : CrewError(Message);
 
-public class CacheError(string message) : CrewError(message);
+public record CacheError(string Message) : CrewError(Message);

@@ -1,6 +1,7 @@
 using FunctionalPeopleInSpaceMaui.Models;
 using ReactiveUI;
 using ReactiveUI.Fody.Helpers;
+using Unit = System.Reactive.Unit;
 
 namespace FunctionalPeopleInSpaceMaui.ViewModels;
 
@@ -11,33 +12,36 @@ public class DetailPageViewModel : ReactiveObject, IQueryAttributable
 
     [Reactive] 
     public CrewDetailModel? CrewMember { get; private set; }
-    
+
     public void ApplyQueryAttributes(IDictionary<string, object> query)
     {
-        ArgumentNullException.ThrowIfNull(query);
-
-        var name = GetQueryValue(query, "name");
-        var image = GetQueryValue(query, "image");
-        var wikipedia = GetQueryValue(query, "wikipedia");
-
-        if (!string.IsNullOrEmpty(name) && Uri.TryCreate(image, UriKind.Absolute, out var imageUri) &&
-            Uri.TryCreate(wikipedia, UriKind.Absolute, out var wikiUri))
-        {
-            CrewMember = new CrewDetailModel(name, imageUri, wikiUri);
-        }
-        else
-        {
-            // Handle the case where one or more parameters are invalid
-            throw new ArgumentException("Invalid or missing query parameters.");
-        }
+        var crewMemberOption = ParseQueryAttributes(query);
+        _ = crewMemberOption.Match(
+            Some: crewMember => 
+            {
+                CrewMember = crewMember;
+                return Unit.Default;
+            },
+            None: () => throw new ArgumentException("Invalid or missing query parameters.")
+        );
     }
 
-    private static string GetQueryValue(IDictionary<string, object> query, string key)
+    private static Option<CrewDetailModel> ParseQueryAttributes(IDictionary<string, object> query)
     {
-        if (query.TryGetValue(key, out var value) && value is string stringValue)
-        {
-            return Uri.UnescapeDataString(stringValue);
-        }
-        return string.Empty;
+        var nameOption = GetQueryValue(query, "name");
+        var imageOption = GetQueryValue(query, "image")
+            .Bind(image => Uri.TryCreate(image, UriKind.Absolute, out var imageUri) ? Some(imageUri) : None);
+        
+        var wikipediaOption = GetQueryValue(query, "wikipedia")
+            .Bind(wikipedia => Uri.TryCreate(wikipedia, UriKind.Absolute, out var wikipediaUri) ? Some(wikipediaUri) : None);
+
+        return nameOption.Bind(name => imageOption.Bind(image => wikipediaOption.Map(wikipedia => new CrewDetailModel(name, image, wikipedia))));
+    }
+
+    private static Option<string> GetQueryValue(IDictionary<string, object> query, string key)
+    {
+        return query.TryGetValue(key, out var value) && value is string stringValue
+            ? Some(Uri.UnescapeDataString(stringValue))
+            : None;
     }
 }

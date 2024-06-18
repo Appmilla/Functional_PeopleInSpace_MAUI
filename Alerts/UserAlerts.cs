@@ -13,14 +13,15 @@ public interface IUserAlerts
 
 public class UserAlerts : IUserAlerts
 {
+    private const ToastDuration Duration = ToastDuration.Short;
+    private const double FontSize = 14;
+    private const double CornerRadius = 4;
+    
     public async Task ShowToast(string message)
     {
         var cancellationTokenSource = new CancellationTokenSource();
         
-        var duration = ToastDuration.Short;
-        double fontSize = 14;
-
-        var toast = Toast.Make(message, duration, fontSize);
+        var toast = Toast.Make(message, Duration, FontSize);
 
         await toast.Show(cancellationTokenSource.Token);
     }
@@ -34,9 +35,9 @@ public class UserAlerts : IUserAlerts
             BackgroundColor = Color.FromArgb("#FFDE1920"), // FF for full opacity, followed by RGB
             TextColor = Colors.White,
             ActionButtonTextColor = Colors.White,
-            CornerRadius = new CornerRadius(4),
-            Font = Font.SystemFontOfSize(14),
-            ActionButtonFont = Font.SystemFontOfSize(14)
+            CornerRadius = new CornerRadius(CornerRadius),
+            Font = Font.SystemFontOfSize(FontSize),
+            ActionButtonFont = Font.SystemFontOfSize(FontSize)
         };
         
         var snackbar = Snackbar.Make(message, duration: duration, visualOptions:snackbarOptions);

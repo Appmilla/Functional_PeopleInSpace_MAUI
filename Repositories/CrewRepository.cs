@@ -21,7 +21,7 @@ public class CrewRepository(ISchedulerProvider schedulerProvider, ISpaceXApi spa
     private readonly TimeSpan _cacheLifetime = TimeSpan.FromDays(1);
 
     [Reactive] public bool IsBusy { get; set; }
-
+    
     public IObservable<Either<CrewError, IReadOnlyList<CrewModel>>> GetCrew(bool forceRefresh = false)
     {
         return Observable.Defer(() =>
@@ -31,7 +31,7 @@ public class CrewRepository(ISchedulerProvider schedulerProvider, ISpaceXApi spa
             return fetchObservable.Do(_ => IsBusy = false);
         }).SubscribeOn(schedulerProvider.ThreadPool);
     }
-
+    
     private IObservable<Either<CrewError, IReadOnlyList<CrewModel>>> FetchFromCacheOrApi()
     {
         DateTimeOffset? expiration = DateTimeOffset.Now + _cacheLifetime;
@@ -41,7 +41,7 @@ public class CrewRepository(ISchedulerProvider schedulerProvider, ISpaceXApi spa
             .Catch<Either<CrewError, IReadOnlyList<CrewModel>>, Exception>(ex =>
                 Observable.Return(Either<CrewError, IReadOnlyList<CrewModel>>.Left(new CacheError(ex.Message))));
     }
-
+    
     private async Task<IReadOnlyList<CrewModel>> FetchAndProcessCrew()
     {
         try
@@ -66,11 +66,9 @@ public class CrewRepository(ISchedulerProvider schedulerProvider, ISpaceXApi spa
     private IObservable<Either<CrewError, IReadOnlyList<CrewModel>>> FetchAndCacheCrew()
     {
         return Observable.FromAsync(FetchAndProcessCrew)
-            .Select(Either<CrewError, IReadOnlyList<CrewModel>>.Right) // Wrap the result in Either.Right
+            .Select(Either<CrewError, IReadOnlyList<CrewModel>>.Right)
             .Catch<Either<CrewError, IReadOnlyList<CrewModel>>, Exception>(ex =>
-                Observable.Return(
-                    Either<CrewError, IReadOnlyList<CrewModel>>.Left(
-                        new NetworkError(ex.Message)))) // Handle exceptions
+                Observable.Return(Either<CrewError, IReadOnlyList<CrewModel>>.Left(new NetworkError(ex.Message))))
             .SubscribeOn(schedulerProvider.ThreadPool);
     }
 }

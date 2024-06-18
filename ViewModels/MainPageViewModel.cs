@@ -73,17 +73,10 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
 
         this.WhenActivated(disposables =>
         {
-            /*
             LoadCommand.IsExecuting.ToPropertyEx(
                     this,
                     x => x.IsRefreshing,
                     scheduler: _schedulerProvider.MainThread)
-                .DisposeWith(disposables);*/
-            
-            
-            this.WhenAnyValue(x => x._crewRepository.IsBusy)
-                .ObserveOn(_schedulerProvider.MainThread)
-                .ToPropertyEx(this, x => x.IsRefreshing, scheduler: _schedulerProvider.MainThread)
                 .DisposeWith(disposables);
             
             disposables.Add(crewSubscription);

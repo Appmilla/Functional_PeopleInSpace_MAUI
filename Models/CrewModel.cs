@@ -1,9 +1,6 @@
-using System;
-using System.Collections.Generic;
 using System.Globalization;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
-using LanguageExt;
 
 namespace FunctionalPeopleInSpaceMaui.Models;
 
@@ -21,15 +18,13 @@ public record CrewModel(
         try
         {
             var models = JsonConvert.DeserializeObject<CrewModel[]>(json, Converter.Settings);
-            return models == null ? 
-                Either<CrewError, CrewModel[]>
-                    .Left(new ParsingError("Deserialization returned null.")) : Either<CrewError, CrewModel[]>
-                    .Right(models);
+            return models == null 
+                ? Either<CrewError, CrewModel[]>.Left(new ParsingError("Deserialization returned null.")) 
+                : Either<CrewError, CrewModel[]>.Right(models);
         }
         catch (JsonException ex)
         {
-            return Either<CrewError, CrewModel[]>
-                .Left(new ParsingError("Failed to parse crew data: " + ex.Message));
+            return Either<CrewError, CrewModel[]>.Left(new ParsingError("Failed to parse crew data: " + ex.Message));
         }
     }
 }
