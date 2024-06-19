@@ -31,43 +31,41 @@ public class CrewRepository(ISchedulerProvider schedulerProvider, ISpaceXApi spa
             return fetchObservable.Do(_ => IsBusy = false);
         }).SubscribeOn(schedulerProvider.ThreadPool);
     }
-    
+
     private IObservable<Either<CrewError, IReadOnlyList<CrewModel>>> FetchFromCacheOrApi()
     {
         DateTimeOffset? expiration = DateTimeOffset.Now + _cacheLifetime;
-        return cache.GetOrFetchObject<IReadOnlyList<CrewModel>>(CrewCacheKey,
-                FetchAndProcessCrew, expiration)
-            .Select(Either<CrewError, IReadOnlyList<CrewModel>>.Right!)
-            .Catch<Either<CrewError, IReadOnlyList<CrewModel>>, Exception>(ex =>
+        return cache.GetOrFetchObject(CrewCacheKey,
+                async () => await FetchAndProcessCrew(), expiration)
+            .Catch((Exception ex) =>
                 Observable.Return(Either<CrewError, IReadOnlyList<CrewModel>>.Left(new CacheError(ex.Message))));
     }
-    
-    private async Task<IReadOnlyList<CrewModel>> FetchAndProcessCrew()
+
+    private async Task<Either<CrewError, IReadOnlyList<CrewModel>>> FetchAndProcessCrew()
     {
         try
         {
             var crewJson = await spaceXApi.GetAllCrew().ConfigureAwait(false);
             var result = CrewModel.FromJson(crewJson);
             return result.Match(
-                Right: crew => crew.ToList().AsReadOnly(),
-                Left: error => throw new Exception(error.Message)
+                Right: crew => Right<CrewError, IReadOnlyList<CrewModel>>(crew.ToList().AsReadOnly()),
+                Left: Left<CrewError, IReadOnlyList<CrewModel>>
             );
         }
         catch (HttpRequestException ex)
         {
-            throw new Exception("Network error: " + ex.Message);
+            return Left<CrewError, IReadOnlyList<CrewModel>>(new NetworkError("Network error: " + ex.Message));
         }
         catch (Exception ex)
         {
-            throw new Exception("Unexpected error: " + ex.Message);
+            return Left<CrewError, IReadOnlyList<CrewModel>>(new CacheError("Unexpected error: " + ex.Message));
         }
     }
 
     private IObservable<Either<CrewError, IReadOnlyList<CrewModel>>> FetchAndCacheCrew()
     {
         return Observable.FromAsync(FetchAndProcessCrew)
-            .Select(Either<CrewError, IReadOnlyList<CrewModel>>.Right)
-            .Catch<Either<CrewError, IReadOnlyList<CrewModel>>, Exception>(ex =>
+            .Catch((Exception ex) =>
                 Observable.Return(Either<CrewError, IReadOnlyList<CrewModel>>.Left(new NetworkError(ex.Message))))
             .SubscribeOn(schedulerProvider.ThreadPool);
     }

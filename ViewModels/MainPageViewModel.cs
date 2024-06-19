@@ -67,7 +67,7 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
         LoadCommand.ThrownExceptions.Subscribe(ex => ShowError(ex.Message));
         LoadCommand.Subscribe(result => result.Match(
             Right: UpdateCrew,
-            Left: error => ShowError(error.Message)));
+            Left: HandleError));
 
         NavigateToDetailCommand = ReactiveCommand.Create<CrewModel>(NavigateToDetail);
 
@@ -88,6 +88,24 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
         _crewCache.Edit(cache => cache.AddOrUpdate(crew));
     }
 
+    private void HandleError(CrewError error)
+    {
+        switch (error)
+        {
+            case ParsingError parsingError:
+                ShowSnackbar("Parsing error occurred. Please contact customer support or update the app.");
+                break;
+            default:
+                ShowError(error.Message);
+                break;
+        }
+    }
+
+    private void ShowSnackbar(string message)
+    {
+        _userAlerts.ShowSnackbar(message, TimeSpan.FromSeconds(20)).FireAndForgetSafeAsync();
+    }
+    
     private void ShowError(string message)
     {
         _userAlerts.ShowToast(message).FireAndForgetSafeAsync();

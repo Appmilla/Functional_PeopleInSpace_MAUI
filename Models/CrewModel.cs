@@ -18,6 +18,8 @@ public record CrewModel(
         try
         {
             var models = JsonConvert.DeserializeObject<CrewModel[]>(json, Converter.Settings);
+            
+            //throw new JsonException("Property not found"); // Simulate error
             return models == null 
                 ? Either<CrewError, CrewModel[]>.Left(new ParsingError("Deserialization returned null.")) 
                 : Either<CrewError, CrewModel[]>.Right(models);
