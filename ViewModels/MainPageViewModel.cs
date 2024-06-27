@@ -36,6 +36,8 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
 
     private readonly SourceCache<CrewModel, string> _crewCache = new(crew => crew.Id);
 
+    private static readonly CrewModelComparer CrewComparer = new();
+    
     public ViewModelActivator Activator { get; } = new();
 
     public MainPageViewModel(
@@ -85,7 +87,7 @@ public class MainPageViewModel : ReactiveObject, IActivatableViewModel
 
     private void UpdateCrew(IReadOnlyList<CrewModel> crew)
     {
-        _crewCache.Edit(cache => cache.AddOrUpdate(crew));
+        _crewCache.Edit(cache => cache.AddOrUpdate(crew, CrewComparer));
     }
 
     private void HandleError(CrewError error)
